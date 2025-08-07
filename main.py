@@ -541,7 +541,7 @@ def save_to_csv(data, file_path):
             writer.writerow(company)
 
 
-def process_company_batch(companies_basic_data, main_driver):
+def process_company_batch(companies_basic_data):
     try:
         driver = setup_driver()
         companies_data = []
@@ -685,7 +685,7 @@ def main():
             
             futures = []
             for batch in batches:
-                future = executor.submit(process_company_batch, batch, driver)
+                future = executor.submit(process_company_batch, batch)
                 futures.append(future)
             
             all_companies_data = []
