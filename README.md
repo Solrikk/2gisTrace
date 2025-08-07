@@ -11,7 +11,7 @@
 Установить зависимости можно командой:
 
 ```bash
-pip install selenium webdriver-manager
+pip install -r requirements.txt
 ```
 
 ## Запуск
