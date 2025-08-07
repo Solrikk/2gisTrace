@@ -25,7 +25,7 @@
 Клонируйте репозиторий и установите зависимости:
 
 ```bash
-git clone <your-repo-url>
+git clone <https://github.com/Solrikk/2gisTrace>
 cd 2gisTrace
 ```
 
