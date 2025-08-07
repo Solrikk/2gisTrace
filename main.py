@@ -3,6 +3,8 @@ import os
 import time
 import csv
 import concurrent.futures
+import argparse
+import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -12,6 +14,12 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 OUTPUT_FOLDER = "parsed_data"
 if not os.path.exists(OUTPUT_FOLDER):
     os.makedirs(OUTPUT_FOLDER)
@@ -20,7 +28,7 @@ csv_file_path = os.path.join(OUTPUT_FOLDER, "kids_furniture_companies.csv")
 
 
 def setup_driver():
-    print("Инициализация драйвера...")
+    logger.info("Инициализация драйвера...")
     chrome_options = Options()
 
     chrome_options.add_argument("--headless")
@@ -57,15 +65,15 @@ def setup_driver():
     }
     chrome_options.add_experimental_option("prefs", prefs)
 
-    print("Создание экземпляра Chrome...")
+    logger.info("Создание экземпляра Chrome...")
     try:
         driver = webdriver.Chrome(options=chrome_options)
         driver.set_page_load_timeout(20)
         driver.set_script_timeout(20)
-        print("Драйвер успешно создан")
+        logger.info("Драйвер успешно создан")
         return driver
     except Exception as e:
-        print(f"Ошибка при создании драйвера: {e}")
+        logger.error("Ошибка при создании драйвера: %s", e)
         raise
 
 
@@ -77,12 +85,12 @@ def extract_company_basic_data(company_element):
         # Добавим небольшую паузу и проверку доступности элемента
         if not company_element.is_displayed():
             raise Exception("Элемент не отображается")
-        
+
         name_element = company_element.find_element(By.CSS_SELECTOR, "._1rehek")
         company_data["Название"] = name_element.text.strip()
         company_data["Ссылка 2ГИС"] = name_element.get_attribute("href")
     except Exception as e:
-        print(f"Ошибка при получении названия: {e}")
+        logger.warning("Ошибка при получении названия: %s", e)
         company_data["Название"] = "Н/Д"
         company_data["Ссылка 2ГИС"] = "Н/Д"
 
@@ -90,28 +98,28 @@ def extract_company_basic_data(company_element):
         address = company_element.find_element(By.CSS_SELECTOR, "._14quei").text.strip()
         company_data["Адрес"] = address
     except Exception as e:
-        print(f"Ошибка при получении адреса: {e}")
+        logger.warning("Ошибка при получении адреса: %s", e)
         company_data["Адрес"] = "Н/Д"
 
     try:
         category = company_element.find_element(By.CSS_SELECTOR, "._4cxmw7").text.strip()
         company_data["Категория"] = category
     except Exception as e:
-        print(f"Ошибка при получении категории: {e}")
+        logger.warning("Ошибка при получении категории: %s", e)
         company_data["Категория"] = "Н/Д"
 
     try:
         rating = company_element.find_element(By.CSS_SELECTOR, "._y10azs").text.strip()
         company_data["Рейтинг"] = rating
     except Exception as e:
-        print(f"Ошибка при получении рейтинга: {e}")
+        logger.warning("Ошибка при получении рейтинга: %s", e)
         company_data["Рейтинг"] = "Н/Д"
 
     try:
         reviews = company_element.find_element(By.CSS_SELECTOR, "._jspzdm").text.strip()
         company_data["Отзывы"] = reviews
     except Exception as e:
-        print(f"Ошибка при получении отзывов: {e}")
+        logger.warning("Ошибка при получении отзывов: %s", e)
         company_data["Отзывы"] = "Н/Д"
 
     return company_data
@@ -133,7 +141,11 @@ def parse_company_data(company_basic_data, driver):
             
             company_data.update(detailed_info)
         except Exception as e:
-            print(f"Ошибка при получении деталей для {company_data['Название']}: {e}")
+            logger.warning(
+                "Ошибка при получении деталей для %s: %s",
+                company_data["Название"],
+                e,
+            )
             company_data["Ссылка"] = link
     else:
         company_data["Ссылка"] = "Н/Д"
@@ -142,7 +154,7 @@ def parse_company_data(company_basic_data, driver):
 
 
 def get_company_details(driver, company_url):
-    print(f"Переход на страницу компании: {company_url}")
+    logger.info("Переход на страницу компании: %s", company_url)
 
     main_window = driver.current_window_handle
 
@@ -197,8 +209,11 @@ def get_company_details(driver, company_url):
                     break
 
             except Exception as e:
-                print(
-                    f"Попытка {attempt+1}/{max_retries}. Ошибка при получении телефонов: {e}"
+                logger.debug(
+                    "Попытка %s/%s. Ошибка при получении телефонов: %s",
+                    attempt + 1,
+                    max_retries,
+                    e,
                 )
                 time.sleep(1)
 
@@ -241,7 +256,7 @@ def get_company_details(driver, company_url):
             if "Веб-сайт" not in detailed_info:
                 detailed_info["Веб-сайт"] = "Н/Д"
         except Exception as e:
-            print(f"Ошибка при получении веб-сайта: {e}")
+            logger.warning("Ошибка при получении веб-сайта: %s", e)
             detailed_info["Веб-сайт"] = "Н/Д"
 
         try:
@@ -262,10 +277,10 @@ def get_company_details(driver, company_url):
                 )
                 if info_tab:
                     info_tab.click()
-                    print("Переключились на вкладку Инфо")
+                    logger.debug("Переключились на вкладку Инфо")
                     time.sleep(1)
             except:
-                print("Не удалось найти или переключиться на вкладку Инфо")
+                logger.warning("Не удалось найти или переключиться на вкладку Инфо")
             
             try:
                 business_type_block = WebDriverWait(driver, 3).until(
@@ -277,11 +292,13 @@ def get_company_details(driver, company_url):
                     if business_type_buttons:
                         types = [btn.text.strip() for btn in business_type_buttons if btn.text.strip()]
                         detailed_info["Тип предприятия"] = "; ".join(types)
-                        print(f"Найден тип предприятия: {detailed_info['Тип предприятия']}")
+                        logger.debug(
+                            "Найден тип предприятия: %s", detailed_info["Тип предприятия"]
+                        )
                 work_mode = determine_work_mode(detailed_info['Тип предприятия'])
-                print(f"Определен режим работы: {work_mode}")
+                logger.debug("Определен режим работы: %s", work_mode)
             except Exception as e:
-                print(f"Способ 1 не удался: {e}")
+                logger.debug("Способ 1 не удался: %s", e)
             
             if detailed_info["Тип предприятия"] == "Н/Д":
                 try:
@@ -294,10 +311,13 @@ def get_company_details(driver, company_url):
                         if type_buttons:
                             types = [btn.text.strip() for btn in type_buttons if btn.text.strip()]
                             detailed_info["Тип предприятия"] = "; ".join(types)
-                            print(f"Найден тип предприятия (способ 2): {detailed_info['Тип предприятия']}")
+                            logger.debug(
+                                "Найден тип предприятия (способ 2): %s",
+                                detailed_info["Тип предприятия"],
+                            )
                             break
                 except Exception as e:
-                    print(f"Способ 2 не удался: {e}")
+                    logger.debug("Способ 2 не удался: %s", e)
             
             if detailed_info["Тип предприятия"] == "Н/Д":
                 try:
@@ -310,10 +330,13 @@ def get_company_details(driver, company_url):
                             business_types = next_div.text.strip()
                             if business_types:
                                 detailed_info["Тип предприятия"] = business_types
-                                print(f"Найден тип предприятия (способ 3): {detailed_info['Тип предприятия']}")
+                                logger.debug(
+                                    "Найден тип предприятия (способ 3): %s",
+                                    detailed_info["Тип предприятия"],
+                                )
                                 break
                 except Exception as e:
-                    print(f"Способ 3 не удался: {e}")
+                    logger.debug("Способ 3 не удался: %s", e)
             
             if detailed_info["Тип предприятия"] == "Н/Д":
                 try:
@@ -325,13 +348,16 @@ def get_company_details(driver, company_url):
                         if buttons:
                             types = [btn.text.strip() for btn in buttons if btn.text.strip()]
                             detailed_info["Тип предприятия"] = "; ".join(types)
-                            print(f"Найден тип предприятия (способ 4): {detailed_info['Тип предприятия']}")
+                            logger.debug(
+                                "Найден тип предприятия (способ 4): %s",
+                                detailed_info["Тип предприятия"],
+                            )
                             break
                 except Exception as e:
-                    print(f"Способ 4 не удался: {e}")
+                    logger.debug("Способ 4 не удался: %s", e)
                 
         except Exception as e:
-            print(f"Ошибка при получении типа предприятия: {e}")
+            logger.warning("Ошибка при получении типа предприятия: %s", e)
             detailed_info["Тип предприятия"] = "Н/Д"
 
         try:
@@ -395,7 +421,7 @@ def get_company_details(driver, company_url):
                             social_networks[network] = url
                 
             except Exception as e:
-                print(f"Ошибка при поиске соцсетей через JavaScript: {e}")
+                logger.debug("Ошибка при поиске соцсетей через JavaScript: %s", e)
             
             if all(value == "Н/Д" for key, value in social_networks.items() if key != "Другие соцсети"):
                 try:
@@ -403,7 +429,7 @@ def get_company_details(driver, company_url):
                     
                     if contact_tabs:
                         contact_tabs[0].click()
-                        print("Переключились на вкладку Контакты")
+                        logger.debug("Переключились на вкладку Контакты")
                         time.sleep(0.5)
                         
                         social_links = driver.execute_script(social_networks_script)
@@ -414,12 +440,12 @@ def get_company_details(driver, company_url):
                                     social_networks[network] = url
                                     
                 except Exception as e:
-                    print(f"Ошибка при поиске соцсетей на вкладке Контакты: {e}")
+                    logger.debug("Ошибка при поиске соцсетей на вкладке Контакты: %s", e)
             
             detailed_info.update(social_networks)
             
         except Exception as e:
-            print(f"Ошибка при получении социальных сетей: {e}")
+            logger.warning("Ошибка при получении социальных сетей: %s", e)
             detailed_info.update({
                 "ВКонтакте": "Н/Д", "YouTube": "Н/Д", "WhatsApp": "Н/Д",
                 "Telegram": "Н/Д", "Instagram": "Н/Д", "Facebook": "Н/Д",
@@ -427,7 +453,7 @@ def get_company_details(driver, company_url):
             })
 
     except Exception as e:
-        print(f"Критическая ошибка при получении данных компании: {e}")
+        logger.error("Критическая ошибка при получении данных компании: %s", e)
         return {
             "Телефоны": "Н/Д",
             "Веб-сайт": "Н/Д",
@@ -449,7 +475,7 @@ def get_company_details(driver, company_url):
             driver.close()
             driver.switch_to.window(main_window)
         except Exception as e:
-            print(f"Ошибка при закрытии вкладки: {e}")
+            logger.warning("Ошибка при закрытии вкладки: %s", e)
 
         time.sleep(2)
 
@@ -523,19 +549,19 @@ def process_company_batch(companies_basic_data, main_driver):
             try:
                 company_data = parse_company_data(company_basic_data, driver)
                 companies_data.append(company_data)
-                print(f"Обработана компания: {company_data['Название']}")
+                logger.info("Обработана компания: %s", company_data["Название"])
             except Exception as e:
-                print(f"Ошибка при обработке компании: {e}")
+                logger.error("Ошибка при обработке компании: %s", e)
         driver.quit()
         return companies_data
     except Exception as e:
-        print(f"Ошибка в потоке обработки компаний: {e}")
+        logger.error("Ошибка в потоке обработки компаний: %s", e)
         return []
 
 def main():
     try:
         # Интерактивный ввод параметров
-        print("=== Настройка парсинга 2ГИС ===")
+        logger.info("=== Настройка парсинга 2ГИС ===")
         
         # Словарь доступных городов
         cities = {
@@ -557,9 +583,9 @@ def main():
             "16": ("volgograd", "Волгоград")
         }
         
-        print("\nДоступные города:")
+        logger.info("\nДоступные города:")
         for key, (alias, name) in cities.items():
-            print(f"{key}. {name}")
+            logger.info("%s. %s", key, name)
         
         while True:
             city_choice = input("\nВыберите город (введите номер): ").strip()
@@ -567,40 +593,40 @@ def main():
                 city_alias, city_name = cities[city_choice]
                 break
             else:
-                print("Неверный выбор. Попробуйте снова.")
+                logger.warning("Неверный выбор. Попробуйте снова.")
         
         search_query = input(f"\nВведите поисковый запрос для {city_name}: ").strip()
         
         if not search_query:
             search_query = "детская мебель"
-            print(f"Используется запрос по умолчанию: '{search_query}'")
+            logger.info("Используется запрос по умолчанию: '%s'", search_query)
         
         safe_query = "".join(c for c in search_query if c.isalnum() or c in (' ', '-', '_')).rstrip()
         safe_city = city_name.replace("-", "_").replace(" ", "_")
         global csv_file_path
         csv_file_path = os.path.join(OUTPUT_FOLDER, f"{safe_city}_{safe_query.replace(' ', '_')}.csv")
         
-        print(f"\nНачинаем парсинг:")
-        print(f"Город: {city_name}")
-        print(f"Запрос: {search_query}")
-        print(f"Файл результатов: {csv_file_path}")
-        print("=" * 50)
+        logger.info("\nНачинаем парсинг:")
+        logger.info("Город: %s", city_name)
+        logger.info("Запрос: %s", search_query)
+        logger.info("Файл результатов: %s", csv_file_path)
+        logger.info("=" * 50)
         
         driver = setup_driver()
         
         MAX_WORKERS = 4
         BATCH_SIZE = 3
         
-        print("Открытие сайта 2ГИС...")
+        logger.info("Открытие сайта 2ГИС...")
         driver.get(f"https://2gis.ru/{city_alias}")
-        print(f"Открыт 2ГИС для города {city_name}")
+        logger.info("Открыт 2ГИС для города %s", city_name)
 
         search_input = WebDriverWait(driver, 5).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "input._cu5ae4")))
 
         search_input.send_keys(search_query)
         search_input.send_keys(Keys.ENTER)
-        print(f"Введен запрос: '{search_query}'")
+        logger.info("Введен запрос: '%s'", search_query)
 
         WebDriverWait(driver, 7).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "div._1kf6gff")))
@@ -613,7 +639,7 @@ def main():
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS)
 
         while current_page <= max_pages:
-            print(f"Обработка страницы {current_page}")
+            logger.info("Обработка страницы %s", current_page)
 
             time.sleep(1.5)
 
@@ -621,10 +647,10 @@ def main():
                                                     "div._1kf6gff")
 
             if not company_elements:
-                print("Компании не найдены на этой странице")
+                logger.info("Компании не найдены на этой странице")
                 break
 
-            print(f"Обработка {len(company_elements)} компаний на странице")
+            logger.info("Обработка %s компаний на странице", len(company_elements))
             
             companies_basic_data = []
             for i, element in enumerate(company_elements):
@@ -634,19 +660,26 @@ def main():
                         if i < len(current_elements):
                             element = current_elements[i]
                         else:
-                            print(f"Элемент {i} больше не доступен")
+                            logger.debug("Элемент %s больше не доступен", i)
                             continue
                     except:
-                        print(f"Не удалось повторно найти элемент {i}")
+                        logger.warning("Не удалось повторно найти элемент %s", i)
                         continue
                     
                     basic_data = extract_company_basic_data(element)
                     companies_basic_data.append(basic_data)
                 except Exception as e:
-                    print(f"Ошибка при извлечении базовых данных для элемента {i}: {e}")
+                    logger.warning(
+                        "Ошибка при извлечении базовых данных для элемента %s: %s",
+                        i,
+                        e,
+                    )
                     continue
             
-            print(f"Извлечены базовые данные для {len(companies_basic_data)} компаний")
+            logger.info(
+                "Извлечены базовые данные для %s компаний",
+                len(companies_basic_data),
+            )
             
             batches = [companies_basic_data[i:i+BATCH_SIZE] for i in range(0, len(companies_basic_data), BATCH_SIZE)]
             
@@ -661,11 +694,13 @@ def main():
                     batch_data = future.result()
                     all_companies_data.extend(batch_data)
                 except Exception as e:
-                    print(f"Ошибка при получении результатов из потока: {e}")
+                    logger.warning("Ошибка при получении результатов из потока: %s", e)
 
             if all_companies_data:
                 save_to_csv(all_companies_data, csv_file_path)
-                print(f"Данные с страницы {current_page} сохранены в CSV")
+                logger.info(
+                    "Данные с страницы %s сохранены в CSV", current_page
+                )
 
             try:
                 next_page_found = False
@@ -686,7 +721,11 @@ def main():
                                 time.sleep(0.5)
                                 driver.execute_script("arguments[0].click();", next_page_buttons[0])
                                 next_page_found = True
-                                print(f"Найдена кнопка для страницы {current_page + 1} (способ 1, xpath: {xpath})")
+                                logger.debug(
+                                    "Найдена кнопка для страницы %s (способ 1, xpath: %s)",
+                                    current_page + 1,
+                                    xpath,
+                                )
                                 break
                         except Exception as e_sub:
                             continue
@@ -695,7 +734,7 @@ def main():
                         raise Exception("Ни один xpath не сработал")
                             
                 except Exception as e1:
-                    print(f"Способ 1 не удался: {str(e1)[:100]}")
+                    logger.debug("Способ 1 не удался: %s", str(e1)[:100])
                 
                 if not next_page_found:
                     try:
@@ -708,12 +747,15 @@ def main():
                                     time.sleep(0.5)
                                     driver.execute_script("arguments[0].click();", parent)
                                     next_page_found = True
-                                    print(f"Найдена кнопка для страницы {current_page + 1} (способ 2)")
+                                    logger.debug(
+                                        "Найдена кнопка для страницы %s (способ 2)",
+                                        current_page + 1,
+                                    )
                                     break
                             except:
                                 continue
                     except Exception as e2:
-                        print(f"Способ 2 не удался: {str(e2)[:100]}")
+                        logger.debug("Способ 2 не удался: %s", str(e2)[:100])
                 
                 if not next_page_found:
                     try:
@@ -724,21 +766,25 @@ def main():
                             time.sleep(0.5)
                             driver.execute_script("arguments[0].click();", next_buttons[0])
                             next_page_found = True
-                            print(f"Найдена кнопка 'Вперед/Следующая' для перехода на следующую страницу (способ 3)")
+                            logger.debug(
+                                "Найдена кнопка 'Вперед/Следующая' для перехода на следующую страницу (способ 3)"
+                            )
                     except Exception as e3:
-                        print(f"Способ 3 не удался: {str(e3)[:100]}")
+                        logger.debug("Способ 3 не удался: %s", str(e3)[:100])
                 
                 if not next_page_found and current_page >= 67:
                     try:
                         screenshot_path = f"pagination_debug_page_{current_page}.png"
                         driver.save_screenshot(screenshot_path)
-                        print(f"Сохранен скриншот пагинации: {screenshot_path}")
+                        logger.warning(
+                            "Сохранен скриншот пагинации: %s", screenshot_path
+                        )
                         
                         pagination_html = driver.execute_script("""
                             var elements = document.querySelectorAll('div[class*="_l934xo5"], div[class*="_19xy60y"], div[class*="pagination"]');
                             return Array.from(elements).map(el => el.outerHTML).join('\\n');
                         """)
-                        print(f"HTML пагинации:\n{pagination_html}")
+                        logger.debug("HTML пагинации:\n%s", pagination_html)
                         
                         try:
                             driver.execute_script(f"""
@@ -758,29 +804,40 @@ def main():
                             new_company_elements = driver.find_elements(By.CSS_SELECTOR, "div._1kf6gff")
                             if new_company_elements and len(new_company_elements) > 0:
                                 next_page_found = True
-                                print(f"Переход на страницу {current_page + 1} выполнен через JavaScript")
+                                logger.debug(
+                                    "Переход на страницу %s выполнен через JavaScript",
+                                    current_page + 1,
+                                )
                         except Exception as e_js:
-                            print(f"JavaScript переход не удался: {str(e_js)[:100]}")
+                            logger.debug(
+                                "JavaScript переход не удался: %s",
+                                str(e_js)[:100],
+                            )
                     except Exception as e4:
-                        print(f"Способ 4 не удался: {str(e4)[:100]}")
+                        logger.debug("Способ 4 не удался: %s", str(e4)[:100])
                 
                 if next_page_found:
                     current_page += 1
-                    print(f"Успешный переход на страницу {current_page}")
+                    logger.info("Успешный переход на страницу %s", current_page)
                     time.sleep(2)
                     continue
                 else:
                     raise Exception("Не удалось найти кнопку следующей страницы")
                     
             except Exception as e:
-                print(f"Не удалось перейти на следующую страницу: {str(e)[:100]}")
-                print("Проверка наличия кнопки 'Показать ещё'...")
+                logger.warning(
+                    "Не удалось перейти на следующую страницу: %s",
+                    str(e)[:100],
+                )
+                logger.info("Проверка наличия кнопки 'Показать ещё'...")
                 
                 try:
                     show_more_buttons = driver.find_elements(By.XPATH, 
                         "//button[contains(text(), 'Показать ещё') or contains(text(), 'больше') or contains(text(), 'еще') or contains(@class, '_14xje6l')]")
                     if show_more_buttons and show_more_buttons[0].is_displayed():
-                        print("Найдена кнопка 'Показать ещё'. Нажимаем для загрузки следующей порции результатов.")
+                        logger.info(
+                            "Найдена кнопка 'Показать ещё'. Нажимаем для загрузки следующей порции результатов."
+                        )
                         driver.execute_script("arguments[0].scrollIntoView(true);", show_more_buttons[0])
                         time.sleep(0.5)
                         show_more_buttons[0].click()
@@ -788,17 +845,24 @@ def main():
                         time.sleep(2)
                         continue
                 except Exception as e_show_more:
-                    print(f"Не удалось найти или нажать кнопку 'Показать ещё': {str(e_show_more)[:100]}")
+                    logger.warning(
+                        "Не удалось найти или нажать кнопку 'Показать ещё': %s",
+                        str(e_show_more)[:100],
+                    )
                 
-                print("Достигнута последняя страница результатов или произошла ошибка пагинации.")
-                print(f"Парсинг завершен на странице {current_page}")
+                logger.info(
+                    "Достигнута последняя страница результатов или произошла ошибка пагинации."
+                )
+                logger.info("Парсинг завершен на странице %s", current_page)
                 break
 
         executor.shutdown()
-        print(f"Парсинг завершен. Данные сохранены в {csv_file_path}")
+        logger.info(
+            "Парсинг завершен. Данные сохранены в %s", csv_file_path
+        )
 
     except Exception as e:
-        print(f"Произошла ошибка: {e}")
+        logger.error("Произошла ошибка: %s", e)
 
     finally:
         try:
@@ -808,4 +872,12 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="2ГИС парсер")
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="Уровень логирования (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+    args = parser.parse_args()
+    logging.getLogger().setLevel(getattr(logging, args.log_level.upper(), logging.INFO))
     main()
