@@ -575,7 +575,6 @@ def main():
             search_query = "детская мебель"
             print(f"Используется запрос по умолчанию: '{search_query}'")
         
-        # Обновляем путь к CSV файлу с учетом города и запроса
         safe_query = "".join(c for c in search_query if c.isalnum() or c in (' ', '-', '_')).rstrip()
         safe_city = city_name.replace("-", "_").replace(" ", "_")
         global csv_file_path
@@ -606,7 +605,6 @@ def main():
         WebDriverWait(driver, 7).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "div._1kf6gff")))
         
-        # Дополнительная пауза для стабилизации страницы
         time.sleep(3)
 
         current_page = 1
@@ -628,11 +626,9 @@ def main():
 
             print(f"Обработка {len(company_elements)} компаний на странице")
             
-            # Сначала извлекаем базовые данные всех компаний
             companies_basic_data = []
             for i, element in enumerate(company_elements):
                 try:
-                    # Повторно найдем элемент по индексу, чтобы избежать stale reference
                     try:
                         current_elements = driver.find_elements(By.CSS_SELECTOR, "div._1kf6gff")
                         if i < len(current_elements):
@@ -652,7 +648,6 @@ def main():
             
             print(f"Извлечены базовые данные для {len(companies_basic_data)} компаний")
             
-            # Разбиваем на батчи базовые данные, а не элементы
             batches = [companies_basic_data[i:i+BATCH_SIZE] for i in range(0, len(companies_basic_data), BATCH_SIZE)]
             
             futures = []
@@ -675,7 +670,6 @@ def main():
             try:
                 next_page_found = False
                 
-                # Способ 1: поиск по номеру страницы с учетом различных классов
                 try:
                     xpaths = [
                         f"//span[contains(@class, '_19xy60y') and text()='{current_page + 1}']",
@@ -703,7 +697,6 @@ def main():
                 except Exception as e1:
                     print(f"Способ 1 не удался: {str(e1)[:100]}")
                 
-                # Способ 2: поиск по любому элементу с номером следующей страницы
                 if not next_page_found:
                     try:
                         page_elements = driver.find_elements(By.XPATH, f"//*[text()='{current_page + 1}']")
@@ -722,7 +715,6 @@ def main():
                     except Exception as e2:
                         print(f"Способ 2 не удался: {str(e2)[:100]}")
                 
-                # Способ 3: поиск кнопки "Вперед" или "Следующая"
                 if not next_page_found:
                     try:
                         next_buttons = driver.find_elements(By.XPATH, 
@@ -736,22 +728,18 @@ def main():
                     except Exception as e3:
                         print(f"Способ 3 не удался: {str(e3)[:100]}")
                 
-                # Способ 4: отладка и сохранение скриншота при проблеме с пагинацией
                 if not next_page_found and current_page >= 67:
                     try:
-                        # Сохраняем скриншот для отладки
                         screenshot_path = f"pagination_debug_page_{current_page}.png"
                         driver.save_screenshot(screenshot_path)
                         print(f"Сохранен скриншот пагинации: {screenshot_path}")
                         
-                        # Выводим HTML пагинации для анализа
                         pagination_html = driver.execute_script("""
                             var elements = document.querySelectorAll('div[class*="_l934xo5"], div[class*="_19xy60y"], div[class*="pagination"]');
                             return Array.from(elements).map(el => el.outerHTML).join('\\n');
                         """)
                         print(f"HTML пагинации:\n{pagination_html}")
                         
-                        # Пробуем прямой скрипт для перехода на следующую страницу
                         try:
                             driver.execute_script(f"""
                                 var nextPage = {current_page + 1};
@@ -767,7 +755,6 @@ def main():
                                 return false;
                             """)
                             time.sleep(2)
-                            # Проверим, изменилась ли страница
                             new_company_elements = driver.find_elements(By.CSS_SELECTOR, "div._1kf6gff")
                             if new_company_elements and len(new_company_elements) > 0:
                                 next_page_found = True
